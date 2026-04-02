@@ -1,0 +1,47 @@
+import handleDelete from "../../helpers/crudHelpers/Delete.js";
+import handleGet from "../../helpers/crudHelpers/Get.js";
+import handleCreate from "../../helpers/crudHelpers/handleCreate.js";
+import handleUpdate from "../../helpers/crudHelpers/Update.js";
+import { sendError } from "../../helpers/other/Req_Res_Search_function.js";
+import movieGenresModel from "../../models/productionhouse/movieGenres.model.js";
+// ======================================= crud -----------------------------------
+
+const add = async (req, res) => {
+  try {
+    handleCreate(req, res, movieGenresModel, [], {}, "");
+  } catch (error) {
+    return sendError(res, 404, error.message);
+  }
+};
+
+const get = async (req, res) => {
+  try {
+    handleGet(req, res, movieGenresModel, {});
+  } catch (error) {
+    return sendError(res, 404, error.message);
+  }
+};
+
+const deleteData = async (req, res) => {
+  try {
+    handleDelete(req, res, movieGenresModel, { _id: req.params.itemId });
+  } catch (error) {
+    return sendError(res, 404, error.message);
+  }
+};
+
+const updateDate = async (req, res) => {
+  try {
+    handleUpdate(req, res, movieGenresModel, [], {}, "", {
+      _id: req.params.itemId,
+    });
+  } catch (error) {
+    return sendError(res, 404, error.message);
+  }
+};
+
+// ======================================= crud -----------------------------------
+
+const movieGenreController = { add, get, deleteData, updateDate };
+
+export default movieGenreController;

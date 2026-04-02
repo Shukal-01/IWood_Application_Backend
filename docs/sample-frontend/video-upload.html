@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Upload Sample - Cloudflare R2 Integration</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+        .upload-container {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: white;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .loading {
+            margin-top: 20px;
+            text-align: center;
+            display: none;
+        }
+        .progress-container {
+            margin-top: 20px;
+            display: none;
+        }
+        .progress-bar {
+            height: 20px;
+            background-color: #ecf0f1;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+        .progress {
+            height: 100%;
+            background-color: #2ecc71;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .video-container {
+            margin-top: 30px;
+            display: none;
+        }
+        video {
+            width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .thumbnail {
+            max-width: 200px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        .error {
+            color: #e74c3c;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #fadbd8;
+            border-radius: 4px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Video Upload Demo</h1>
+    
+    <div class="upload-container">
+        <form id="videoUploadForm">
+            <div class="form-group">
+                <label for="videoFile">Select Video File:</label>
+                <input type="file" id="videoFile" name="video" accept="video/*" required>
+            </div>
+            <button type="submit">Upload Video</button>
+        </form>
+        
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress" id="progressBar"></div>
+            </div>
+            <div id="progressText">Uploading: 0%</div>
+        </div>
+        
+        <div class="loading" id="loadingIndicator">
+            <p>Processing video, please wait...</p>
+            <p><small>This might take a few moments depending on the video size</small></p>
+        </div>
+        
+        <div class="error" id="errorMessage"></div>
+    </div>
+    
+    <div class="video-container" id="videoContainer">
+        <h2>Uploaded Video</h2>
+        <img class="thumbnail" id="thumbnail" alt="Video thumbnail">
+        <div id="videoPlayer"></div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const uploadForm = document.getElementById('videoUploadForm');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const videoContainer = document.getElementById('videoContainer');
+            const thumbnail = document.getElementById('thumbnail');
+            const videoPlayer = document.getElementById('videoPlayer');
+            const errorMessage = document.getElementById('errorMessage');
+            
+            uploadForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const fileInput = document.getElementById('videoFile');
+                if (fileInput.files.length === 0) {
+                    showError('Please select a video file.');
+                    return;
+                }
+                
+                const file = fileInput.files[0];
+                // Simple file size validation (50MB limit in this example)
+                if (file.size > 50 * 1024 * 1024) {
+                    showError('File is too large. Maximum file size is 50MB.');
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('video', file);
+                
+                // Reset UI
+                hideError();
+                videoContainer.style.display = 'none';
+                progressBar.style.width = '0%';
+                progressText.textContent = 'Uploading: 0%';
+                progressContainer.style.display = 'block';
+                
+                try {
+                    // Simulate upload progress (since fetch doesn't provide progress for uploads easily)
+                    const progressInterval = simulateProgress();
+                    
+                    const response = await fetch('/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    // Clear progress simulation
+                    clearInterval(progressInterval);
+                    progressContainer.style.display = 'none';
+                    
+                    if (!response.ok) {
+                        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+                    }
+                    
+                    loadingIndicator.style.display = 'block';
+                    
+                    const result = await response.json();
+                    
+                    loadingIndicator.style.display = 'none';
+                    
+                    if (result.success) {
+                        // Display the video and thumbnail
+                        displayVideo(result.videoUrl, result.thumbnailUrl);
+                    } else {
+                        showError('Upload failed: ' + (result.message || 'Unknown error'));
+                    }
+                } catch (error) {
+                    progressContainer.style.display = 'none';
+                    loadingIndicator.style.display = 'none';
+                    showError(`Error: ${error.message}`);
+                    console.error('Error uploading video:', error);
+                }
+            });
+            
+            function displayVideo(videoUrl, thumbnailUrl) {
+                thumbnail.src = thumbnailUrl;
+                videoPlayer.innerHTML = '';
+                
+                const video = document.createElement('video');
+                video.controls = true;
+                video.poster = thumbnailUrl;
+                
+                videoPlayer.appendChild(video);
+                
+                if (Hls.isSupported()) {
+                    const hls = new Hls();
+                    hls.loadSource(videoUrl);
+                    hls.attachMedia(video);
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        // video.play(); // Autoplay might be blocked
+                    });
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    // Native HLS support (Safari)
+                    video.src = videoUrl;
+                } else {
+                    videoPlayer.innerHTML = '<p>Your browser does not support HLS video playback</p>';
+                }
+                
+                videoContainer.style.display = 'block';
+                
+                // Clicking on thumbnail starts the video
+                thumbnail.addEventListener('click', () => {
+                    video.play();
+                });
+            }
+            
+            function simulateProgress() {
+                let progress = 0;
+                return setInterval(() => {
+                    // Simulate slower progress as we get closer to 100%
+                    const increment = (progress < 50) ? 5 : (progress < 80) ? 3 : 1;
+                    progress = Math.min(progress + increment, 90); // Only go to 90%, then we wait for actual completion
+                    progressBar.style.width = `${progress}%`;
+                    progressText.textContent = `Uploading: ${progress}%`;
+                }, 500);
+            }
+            
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.style.display = 'block';
+            }
+            
+            function hideError() {
+                errorMessage.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html> 
